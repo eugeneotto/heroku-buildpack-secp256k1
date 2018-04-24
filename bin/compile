@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir> <env-dir>
+
+### Configure environment
+
+set -o errexit    # always exit on error
+set -o pipefail   # don't ignore exit codes when piping output
+set -o nounset    # fail on unset variables
+
+# debug
+# set -x
+
+### Configure directories
+
+BUILD_DIR=${1:-}
+CACHE_DIR=${2:-}
+ENV_DIR=${3:-}
+BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
+
+SECP256K1_CACHE_DIR="$CACHE_DIR/secp256k1"
+SECP256K1_BUILD_DIR="$BUILD_DIR/.src/secp256k1"
+
+# Install secp256k1 headers and libraries under dir used by heroku-buildpack-apt
+INSTALL_DIR="$BUILD_DIR/.apt/usr"
+
+mkdir -p $SECP256K1_CACHE_DIR
+mkdir -p $SECP256K1_BUILD_DIR
+mkdir -p "$BUILD_DIR/.apt/usr"
+
+cd $BUILD_DIR
+
+### Installation
+
+download_secp256k1() {
+  echo "       Checking out secp256k1"
+  git clone https://github.com/bitcoin-core/secp256k1 $SECP256K1_BUILD_DIR
+}
+
+build_secp256k1() {
+  echo "       Building secp256k1..."
+  cd $SECP256K1_BUILD_DIR
+  ./autogen.sh
+  ./configure --enable-module-recovery --prefix=$SECP256K1_CACHE_DIR
+  make
+  make install
+}
+
+install_secp256k1() {
+  cp -R $SECP256K1_CACHE_DIR/lib $INSTALL_DIR
+  cp -R $SECP256K1_CACHE_DIR/include $INSTALL_DIR
+}
+
+echo "-----> Installing secp256k1"
+
+if [ ! -f $SECP256K1_CACHE_DIR/include/secp256k1.h ]; then
+  download_secp256k1
+  build_secp256k1
+fi
+
+install_secp256k1
